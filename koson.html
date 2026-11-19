@@ -1,0 +1,265 @@
+<!DOCTYPE html>
+<html lang="uz">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Koson — agent visitlari</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<style>
+/* Chap — filtr va ko'rsatkichlar; o'ng — xarita (ko'cha/sun'iy yo'ldosh), pastda — marshrut tartibidagi visitlar jadvali */
+:root{
+  --bg:#f3f5f4; --panel:#ffffff; --ink:#18221f; --muted:#5d6b66; --line:#d9e0dd;
+  --accent:#0b6e5f; --accent-soft:#e1f0ec; --warn:#b4540a; --bad:#b3261e; --good:#1d7a3a;
+  --font-body:Arial,"Segoe UI",sans-serif;
+}
+*{box-sizing:border-box}
+html,body{height:100%;margin:0}
+body{background:var(--bg);color:var(--ink);font:14px/1.45 var(--font-body)}
+header{display:flex;flex-wrap:wrap;align-items:baseline;gap:6px 16px;padding:12px 20px;border-bottom:1px solid var(--line);background:var(--panel)}
+h1{font:700 19px/1.2 var(--font-body);margin:0}
+.src{color:var(--muted);font-size:12px}
+.app{display:grid;grid-template-columns:310px 1fr;gap:14px;padding:14px 20px}
+aside{display:flex;flex-direction:column;gap:12px}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:12px}
+label.f{display:block;font-size:11px;color:var(--muted);margin:0 0 4px;font-weight:700;text-transform:uppercase;letter-spacing:.04em}
+select,input[type=search]{width:100%;padding:7px 9px;border:1px solid var(--line);border-radius:6px;background:var(--panel);color:var(--ink);font:inherit}
+.fields{display:flex;flex-direction:column;gap:11px}
+.days{display:grid;grid-template-columns:repeat(4,1fr);gap:6px}
+.days button{border:1px solid var(--line);background:var(--panel);color:var(--ink);border-radius:6px;padding:6px 0;font:600 13px var(--font-body);cursor:pointer;position:relative}
+.days button .n{display:block;font-size:11px;color:var(--muted);font-weight:400}
+.days button[aria-pressed="true"]{background:var(--accent);border-color:var(--accent);color:#fff}
+.days button[aria-pressed="true"] .n{color:#ffffffcc}
+.days button.low:not([aria-pressed="true"]) .n{color:var(--bad);font-weight:700}
+.days button .sw{position:absolute;left:6px;top:6px;width:7px;height:7px;border-radius:50%}
+.chk{display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer}
+.stats{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.stat{border:1px solid var(--line);border-radius:6px;padding:7px 9px}
+.stat b{display:block;font-size:20px;line-height:1.15;font-variant-numeric:tabular-nums}
+.stat span{font-size:12px;color:var(--muted)}
+.stat.bad b{color:var(--bad)} .stat.ok b{color:var(--good)} .stat.warn b{color:var(--warn)}
+.pill{display:inline-block;padding:1px 8px;border-radius:999px;font-size:12px;font-weight:600}
+.pill.ok{background:var(--accent-soft);color:var(--accent)} .pill.bad{background:#fbe3e1;color:var(--bad)}
+.btn{border:1px solid var(--accent);background:var(--accent);color:#fff;border-radius:6px;padding:7px 10px;font:600 13px var(--font-body);cursor:pointer;width:100%}
+.btn:disabled{opacity:.5;cursor:default}
+.btn.sec{background:var(--panel);color:var(--accent)}
+.note{font-size:12px;color:var(--muted)}
+main{display:flex;flex-direction:column;gap:14px;min-width:0}
+#map{height:64vh;min-height:430px;border-radius:8px;border:1px solid var(--line)}
+.legend{background:#fff;border:1px solid var(--line);border-radius:6px;padding:6px 9px;font-size:12px;line-height:1.7}
+.legend i{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:5px}
+.num-ic{display:flex;align-items:center;justify-content:center;border-radius:50%;color:#fff;font:700 11px Arial;border:2px solid #fff;box-shadow:0 0 0 1px #0004}
+.num-ic.nof{border-color:#b3261e}
+.leaflet-tooltip.km{background:#ffffffe6;border:1px solid #9aa;color:#123;font:700 11px Arial;padding:1px 5px;box-shadow:none}
+.leaflet-tooltip.km:before{display:none}
+.leaflet-tooltip.km.road{border-color:#0b6e5f;color:#0b6e5f}
+.tablehead{display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:space-between;margin-bottom:8px}
+.tablehead h2{margin:0;font-size:16px}
+.tablehead input{max-width:260px}
+.tw{overflow:auto;max-height:430px}
+table{border-collapse:collapse;width:100%;font-size:13px}
+th,td{text-align:left;padding:5px 8px;border-bottom:1px solid var(--line);white-space:nowrap}
+th{position:sticky;top:0;background:var(--panel);color:var(--muted);font-weight:600;font-size:12px;z-index:1}
+td.num,th.num{text-align:right;font-variant-numeric:tabular-nums}
+tbody tr{cursor:pointer} tbody tr:hover,tr.sel{background:var(--accent-soft)}
+.nocoord{color:var(--warn)}
+.empty{color:var(--muted);padding:18px;text-align:center}
+.pop dl{display:grid;grid-template-columns:auto 1fr;gap:2px 8px;margin:6px 0;font-size:12px}
+.pop dt{color:var(--muted)} .pop dd{margin:0}
+.pop a{color:var(--accent);font-weight:600}
+@media (max-width:860px){.app{grid-template-columns:1fr;padding:10px 14px}#map{height:55vh}}
+</style>
+</head>
+<body>
+<header>
+  <h1>Koson: agent visitlari</h1>
+  <span class="src" id="src"></span>
+</header>
+<div class="app">
+  <aside>
+    <div class="card fields">
+      <div><label class="f" for="vil">Viloyat</label><select id="vil"></select></div>
+      <div><label class="f" for="agent">Agent</label><select id="agent"></select></div>
+      <div><label class="f" id="daysLbl">Kun</label><div class="days" id="days" role="group" aria-labelledby="daysLbl"></div></div>
+      <label class="chk" for="route"><input type="checkbox" id="route" checked> Marshrut chizig'i</label>
+      <label class="chk" for="kmlab"><input type="checkbox" id="kmlab" checked> Nuqtalar orasidagi km</label>
+      <label class="chk" for="others"><input type="checkbox" id="others"> Shu kuni boshqa agentlar (kulrang)</label>
+    </div>
+    <div class="card"><div class="stats" id="stats"></div></div>
+    <div class="card fields">
+      <button class="btn" id="road" type="button">Yo'l bo'yicha masofani hisoblash</button>
+      <button class="btn sec" id="fit" type="button">Nuqtalarga moslash</button>
+      <div class="note" id="roadNote">Km — to'g'ri chiziq bo'yicha. Yo'l bo'yicha masofa uchun tugmani bosing (bitta kun tanlangan bo'lsin, internet kerak).</div>
+    </div>
+  </aside>
+  <main>
+    <div id="map"></div>
+    <div class="card">
+      <div class="tablehead">
+        <h2 id="tblTitle">Visitlar</h2>
+        <input type="search" id="q" placeholder="Kod yoki nom bo'yicha qidirish">
+      </div>
+      <div class="tw">
+        <table>
+          <thead><tr><th class="num">№</th><th>Kun</th><th>Kod</th><th>Mijoz</th><th>Hafta</th><th class="num">Oldingisidan, km</th><th class="num">Yo'l bo'yicha, km</th><th class="num saldo-col">Saldo</th><th>Holat</th><th>Xarita</th></tr></thead>
+          <tbody id="tbody"></tbody>
+        </table>
+      </div>
+    </div>
+  </main>
+</div>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script id="data" type="application/json">{"a":[["Koson","RUSTAMOV KS03 SHAXZOD","Dusel","KS03"],["Koson","Kucharov KS02 Shoxruxbek","Cable, Veral","KS02"],["Koson","RUSTAMOV KS01 SARDOR","Dusel","KS01"],["Koson","Qodirov KS06 Jaxongir","Cable, Veral","KS06"],["Koson","Asadullayev KS07 Javohir","Ockean, Tools","KS07"],["Koson","Tillabayev KS08 Asilbek","Ockean, Tools","KS08"]],"c":[["KSN0020","Axmat aka Beshkent",38.818603,65.673189,0,"Y","BESHKENT",null],["KSN0200","OOO XAMZABEK UMAR SAVDO (506 жахонгир ака окибат магазин)",38.855905,65.789271,0,"Y","Qarshi",null],["KSN0218","Qilich aka vagzal",38.824716,65.779317,0,"Y","Qarshi",null],["KSN0358","124 Хуршид Фархорд  Бозор) YATT NORQULOV XURSHID",38.894219,65.807128,0,"Y","Qarshi",null],["KSN0174","shuxrat sum qarshi (шухрат сум карши)",38.852493,65.792093,0,"Y","Qarshi",null],["KSN0059","403 RUSLAN AKA POLOTOV SUM YULI",38.853604,65.79182,0,"Y","Qarshi",null],["KSN0315","OOO ISHONCH HAMKOR BARAKA (178 Акбар ака карши ишонч магазин)",38.815666,65.815608,0,"Y","Qarshi",null],["KSN0170","YATT ESHPOLATOV TEMURMALIK (338 KOMIL AKA NISHON YULI)",38.793215,65.785544,0,"Y","BESHKENT",null],["KSN0366","YATT AMINOV ZOKIR (246 ШАХРИЁР  ОРЗУ БОЗОР)",38.830366,65.796991,0,"Y","Qarshi",null],["KSN0338","YATT SHODMONOV XOLiT (212 SHERALI AKA YASHIL BOZOR)",38.837797,65.796429,0,"Y","Qarshi",null],["KSN0255","OOO QARSHI SITY STROY SHOP (513 АХМАД КАРШИ)",38.858522,65.805117,0,"Y","Qarshi",null],["KSN0139","400 shuxrat aka qarshi yubileyka (шухрат ака юбилейка)",38.843126,65.801779,0,"Y","Qarshi",null],["KSN0231","?арши дадахон",38.853221,65.791852,0,"Y","Qarshi",null],["KSN0404","SHOXRUX ARGINAL",38.830394,65.78463,0,"Y","Qarshi",null],["KSN0048","YATT JOMURODOV ABBOS (400 аббос еркургон)",38.900094,65.801187,0,"Y","Qarshi",null],["KSN0321","OOO BINOKOR SAVDO (66 Акмал Спутник)",38.828707,65.735762,0,"Y","BESHKENT",null],["KSN0406","QURILISH MOLLARI (Axror/Izzat Beshkent)",38.822608,65.664488,0,"Y","Beshkent tumani",null],["KSN0202","Asad farhod bozor 5-dokon",38.894523,65.808279,0,"Y","Qarshi",null],["KSN0177","Donodil Farhod bozor 159-dokon",38.894537,65.807769,0,"Y","Qarshi",null],["KSN0245","YATT KOMILOV VOHID (173 мансур фарход бозор)",38.89432,65.807814,0,"Y","Qarshi",null],["KSN0209","YATT PANJIYEV MUZAFFAR (529 МУЗАФАР АКА САМАРКАНД СТЯНКА ТУГРИСИ)",38.895139,65.808348,0,"Y","Qarshi",null],["KSN0286","YATT NORMATOV DONIYOR (226 завки фарход бозор)",38.894292,65.808099,0,"Y","Qarshi",null],["KSN0365","YATT SUYUNOV ASROR (243 асрор фарход бозор)",38.894669,65.808409,0,"Y","Qarshi",null],["KSN0352","OOO ABDULALIZ ABDUMALIK BIZNES (188 БАХТИЁР ФАРХОД БОЗОР)",38.894283,65.807604,0,"Y","Qarshi",null],["KSN0247","OOO TEMUR KORAGONIY (45 темур  карши сарой)",38.755559,65.758065,0,"Y","BESHKENT",null],["KSN0348","OOO PUBLIC ARENA (88 Лутфилло Бешкент)",38.822496,65.665639,0,"Y","BESHKENT",null],["KSN0154","Davron Farhod bozor",38.894305,65.807457,0,"Y","Qarshi",null],["KSN0160","OOO MAHMUDXON HAMKOR (242 Алишер ака карши вокзал)",38.82297,65.781316,0,"Y","Qarshi",null],["KSN0098","YATT  Gulnora opa vagzal",38.824718,65.779075,0,"Y","Qarshi",null],["KSN0076","102 Ориф Еркургон",38.898262,65.805335,0,"Y","Qarshi",null],["KSN0353","198 КАМОЛ) OOO HOME SPOT",38.902978,65.793306,0,"Y","Qarshi",null],["KSN0332","YATT BOBOYEV BAXROM  (72 Бахром  Аврора)",38.827322,65.691243,0,"Y","BESHKENT",null],["KSN0205","Abduaziz Ixtiyor Airaport",38.83583,65.747164,0,"Y","BESHKENT",null],["KSN0293","YATT TORAQULOV MANSUR (322 мансур еркургон)",38.899658,65.803538,0,"Y","Qarshi",null],["KSN0361","YATT SAMADOV SHAHZOD(206 равшан Жавохир  фарход бозор)",38.89499,65.807036,0,"Y","Qarshi",null],["KSN0058","Xusen aka beshkent (4751)",38.817998,65.645876,0,"Y","BESHKENT",null],["KSN0337","OOO XOJAQUL BOBO NABIRASI DILXUSHBEK (196  Хайрулло  ковчин)",38.790027,65.560545,0,"Y","BESHKENT",null],["KSN0151","OOO DUNYO SHN (350 Шохруз Ковчун)",38.784129,65.542553,0,"Y","BESHKENT",null],["KSN0313","OOO BERDIYEV RAMSHID ASL BARAKA (104 Рамшид  Ковчин)",38.796794,65.568427,0,"Y","BESHKENT",null],["KSN0088","YATT QODIROV DONIYOR (330 ДОНИЙОР ФАР БОЗОР)",38.89439,65.807515,0,"Y","Qarshi",null],["KSN0328","YATT USMONOV ABROR (230  Аброр  фарход  бозор  2)",38.894065,65.806687,0,"Y","Qarshi",null],["KSN0307","YATT ABDIYEV TOXIR (190 фазлиддин  фархот бозор)",38.894663,65.807453,0,"Y","Qarshi",null],["KSN0220","Shoxruh Farhod bozor",38.894607,65.807676,0,"Y","Qarshi",null],["KSN0083","YATT ZOIROV QUVONCHBEK (Quvonch Farhod bozor 4-dokon)",38.8942,65.806943,0,"Y","Qarshi",null],["KSN0140","YATT XAZRATQULOV OLIM (зухриддин ф бозор)",38.894298,65.807397,0,"Y","Qarshi",null],["KSN0314","YATT XALILOV ZOHIDJON (132 Шахбоз Санжар  Фарход  Бозор)",38.894224,65.806984,0,"Y","Qarshi",null],["KSN0329","YATT NIZOMOV ABBOS (236 Озод ака фарход бозор)",38.894609,65.807581,0,"Y","Qarshi",null],["KSN0334","YATT IBRAGIMOV SARDOR (108 Сардор  Фарход  бозор)",38.894365,65.807426,0,"Y","Qarshi",null],["KSN0175","OOO HOJIAKBAR STROY SHOP(Hojiakbar aka Dunyo)",38.850236,65.826495,0,"Y","Qarshi",null],["KSN0290","522 Рухидин ака нишон",38.653248,65.704785,0,"Y","NISHON",null],["KSN0431","Norov Iskandar",38.892153,65.733732,0,"Y","Koson",null],["KSN0418","ELYOR RAXMONOV XUSUSIY KORXONA",38.784298,65.535581,0,"Y","Qashqadaryo",null],["KSN0222","OOO GULOM BARAKA STROY (маруф ака барака строй)",38.865583,65.792425,0,"Y","Qarshi",null],["KSN0345","54 Абдулазиз  каманди) OOO AZIMJON NARGIZAXON",38.860793,65.779926,0,"Y","Qarshi",null],["KSN0308","YATT HAMRAEV SUNNAT (287 Суннат  Фарход бозор)",38.894315,65.807887,0,"Y","Qarshi",null],["KSN0260","284  элбек  карши)  YATT KOMOLOV ELYOR",38.894277,65.807604,0,"Y","Qarshi",null],["KSN0351","YATT TURSUNOVA SHAXLO (184 хасан фарход бозор)",38.859217,65.766509,0,"Y","Qarshi",null],["KSN0411","YATT: ISMAT SAMADOV",38.894202,65.806833,0,"Y","Qashqadaryo Qarshi shaxri",null],["KSN0417","YATT: QAYUMOV MUZROB 48 DOKON",38.894841,65.808312,0,"Y","Qashqadaryo",null],["KSN0148","YATT QODIROV BAXROM (98 Одил  Эски Шахар)",38.869949,65.800916,0,"Y","Qarshi",null],["KSN0336","OOO FARID DELMURATOVICH  (164 Шерзот Узтурлоб)",38.868195,65.797707,0,"Y","Qarshi",null],["KSN0403","QURILISH MOLLARI (XONOBOD)",38.849066,65.923213,0,"Y","Qarshi shaxri",null],["KSN0258","YATT OLIMJONOV ORIFJON (312 уктам нишон)",38.650573,65.699012,0,"Y","NISHON",null],["KSN0100","Ravshan aka nishon",38.299258,65.551809,0,"Y","NISHON",null],["KSN0026","Jamshid F.bozor",38.894808,65.807033,0,"Y","Qarshi",null],["KSN0273","YATT ISAYEVA OLIYA (142 Фирдавс  беш  юлдуз)",38.859824,65.896273,0,"Y","Qarshi",null],["KSN0187","OOO IBROXIMOV FIRDAVS (503 ФИРДАВС ЕПА)",38.856412,65.783344,0,"Y","Qarshi",null],["KSN0250","OOO FAROVON HAYOT (508 АКМАЛ АКА ЭСКИ ШАХАР)",38.868186,65.797687,0,"Y","Qarshi",null],["KSN0294","OOO GOLD FIRAD (521 Хуршид фират)",38.862361,65.786091,0,"Y","Qarshi",null],["KSN0201","OOO FASU IS A AGREMENT (507 феруз фарход бозор)",38.894526,65.806842,0,"Y","Qarshi",null],["KSN0325","226  Тулкин  фарход бозор) YATT BOQIYEV TOLQIN",38.894695,65.807112,0,"Y","Qarshi",null],["KSN0326","OOO NASAF STROY TUJFS (162 Темир насаф строй)",38.859285,65.766564,0,"Y","Qarshi",null],["KSN0271","OOO BARAKA NASAF (263 Фарангиз магазин карши)",38.855526,65.78276,0,"Y","Qarshi",null],["KSN0212","Askar nishon",38.570153,65.717056,0,"Y","NISHON",null],["KSN0072","YATT QODIROV BEKZOD",38.894376,65.807609,0,"Y","Qarshi",null],["KSN0429","Abbos aka kat",38.818804,65.802953,0,"Y","Qarshi shahar",null],["KSN0423","Xurshid stroy market",38.836315,65.799796,0,"Y","Qashqadaryo",null],["KSN0421","Azamat Sum yuli",38.852584,65.791971,0,"Y","Koson",null],["KSN0330","OOO FAN NAZARBEK  (240   Фарход  Назар  Магазин)",38.857773,65.783122,0,"Y","Qarshi",null],["KSN0252","OOO XAMZABEK UMAR SAVDO (500 Хамза   КАРШИ)",38.860063,65.783395,0,"Y","Qarshi",null],["KSN0426","Elektrikal Savdi",38.894073,65.806813,0,"Y","Qashqadaryo",null],["KSN0288","OOO ANVAROV AZIZXON AAA (315 акмал фарход бозор 2)",38.894676,65.806501,0,"Y","Qarshi",null],["KSN0262","OOO MURODOV ULUGBEK (224 Улугбек  грес)",38.492148,65.635236,0,"Y","NISHON GRES",null],["KSN0399","Baby chop",38.89981,65.803,0,"Y","Qarshi shaxri",null],["KSN0163","YATT SHERALIYEV G'AYRAT (Sardor 79do'kon (Farhod bozor))",38.894039,65.808234,0,"Y","Qarshi",null],["KSN0317","YATT CHORIYEV SHERZOD (200  Шерзод  фарход бозор)",38.894273,65.807715,0,"Y","Qarshi",null],["KSN0432","Nomi ilxom togʻa",38.869565,65.799259,0,"Y","Iski bozor",null],["KSN0430","Nodir nishon",38.616215,65.682755,0,"Y","Nishon tumani",null],["KSN0414","Shaxzodbek Eco Stroy",38.857329,65.783315,0,"Y","kamandi yo'l",null],["KSN0420","Hayrat magazin",38.860413,65.783005,0,"Y","Koson",null],["KSN0433","Isroil aka",38.799229,65.783449,0,"Y","qarshi shaxri",null],["KSN0354","YATT BERDIYEV ABBOS (215  АБДУЛЛА АКА  ФАРХОТ БОЗОР)",38.894548,65.808305,0,"Y","Qarshi",null],["KSN0362","YATT PARDAEV O'KTAM (210 Уктам  ФАРХОД бозор)",38.894311,65.807776,0,"Y","Qarshi",null],["KSN0312","YATT SHARIPOV ZOKIR (86 Зокир ака фарход бозор)",38.894142,65.807911,0,"Y","Qarshi",null],["KSN0310","YATT MAXMUDOV ABROR (58 Аброр  Фарход бозор)",38.894432,65.808274,0,"Y","Qarshi",null],["KSN0179","Maxtumquli yerqo'rg'on",38.900637,65.802902,0,"Y","Qarshi",null],["KSN0227","ЖАМШИД ГРЕС (JAMSHID GRES)",38.492803,65.641478,0,"Y","NISHON GRES",null],["KSN0413","Jonibek Sum",38.853636,65.792052,0,"Y","Koson",null],["KSN0031","140 Atakulov Sunnat ( Farhod bozor)",38.89435,65.807813,0,"Y","Qarshi",null],["KSN0079","DEHQONOBOD",38.345702,66.45092,0,"Y","DEHQONOBOD",null],["KSN0146","50 Зафар косон) YATT OROQOV MUZAFFAR",39.029052,65.578415,0,"Y","Koson",null],["KSN0186","YATT KOSON STROY CITY BARAKA (303 ЖАСУР АКА КОСОН)",39.028588,65.567612,0,"Y","Koson",null],["KSN0129","Suxrob aka yerqo'rg'on",38.899771,65.803634,0,"Y","Qarshi",null],["KSN0363","YATT XOLMAMATOV SHAVKAT (290 Шавкат ака каспи)",38.923838,65.403892,0,"Y","KASPI",null],["KSN0344","52 Аббос Касби) OOO MOGILON ABBOSJON",38.923959,65.409201,0,"Y","KASPI",null],["KSN0316","OOO  QAMASHILIK MAVLON BOBO (110 Суннат Кмаши)",38.833643,65.374235,0,"Y","MIRISHKOR TUMANI",null],["KSN0166","OOO JAFARBEK RUSTAM DOSTON (324 RUSTAM MAYMANOQ)",39.064909,65.404147,0,"Y","Koson",null],["KSN0368","OOO ISLOMBEK RIVOJ KAPITAL (260  ЯНГИ ХАЁТ  ИКРОМ КАСБИ)",38.920592,65.40915,0,"Y","KASPI",null],["KSN0292","OOO NEW RAMZAN (518 БЕГЗОД АКА)",38.884023,65.640049,0,"Y","BESHKENT",null],["KSN0278","291 БАХТИЁР АКА КАСБИ",38.920875,65.399011,0,"Y","KASPI",null],["KSN0022","Rafael yerqurgon",38.8997,65.803314,0,"Y","Qarshi",null],["KSN0065","YATT ABDUMAJIDOV OYBEK (225 ОЙБЕК ваникомат)",39.034483,65.583765,0,"Y","Koson",null],["KSN0063","OOO KOSON MARVARID (170 Аббос  марварид)",39.028996,65.581246,0,"Y","Koson",null],["KSN0061","VOHA-IFORI MCHJ 350 (акмал фаровон касби)",38.92267,65.404368,0,"Y","KASPI",null],["KSN0343","YATT BOTIROV UYG'UN (116 Уйгун  касби)",38.923526,65.408989,0,"Y","KASPI",null],["KSN0318","OOO KOSON MEGA STROY BARAKA (204 Абдумалик  Косон)",39.027076,65.57469,0,"Y","Koson",null],["KSN0172","YATT CHORIYEV JAHONGIR (344 ЖАХОНГИР ЕРКУРГОН)",38.900677,65.80219,0,"Y","Qarshi",null],["KSN0339","YATT MAHMATOV RAVSHAN (228 Yangi hayot Ravshan aka)",39.066463,65.400175,0,"Y","Koson",null],["KSN0409","NAZAROV DILSHOD",39.01635,65.567307,0,"Y","Qashqadaryo",null],["KSN0407","QURILISH MOLLARI ( Bahodir AKA)",39.003555,65.431983,0,"Y","Komilon qishlog’i",null],["KSN0359","YATT NIYOZOVA DILNOZ (144  Дилшод  Еркургон)",38.899913,65.803253,0,"Y","Qarshi",null],["KSN0164","Xurshid yerqurgon",38.899647,65.803387,0,"Y","Qarshi",null],["KSN0341","YATT OCHILOV SARDOR (106 Сардор  Военкомат)",39.036434,65.584138,0,"Y","Koson",null],["KSN0346","YATT NUSRATILLAYEV JASURJON (84 Жасур косон)",39.029313,65.575901,0,"Y","Koson",null],["KSN0130","YATT SHARIPOV BAXTIYOR (214 БАХТИЁР АКА  КОСОН)",39.028742,65.577918,0,"Y","Koson",null],["KSN0161","YATT RAZZOQOV ZOYIR (229 Зойир  янги  хаёт)",39.02875,65.577964,0,"Y","Koson",null],["KSN0085","Tojiddin koson",39.028633,65.577408,0,"Y","Koson",null],["KSN0268","OOO IZZAT IBRAT KARIMBOY (313 рауф ака майманок)",39.066612,65.399052,0,"Y","Koson",null],["KSN0213","OOO ISLOMBEK SADRIDDIN OGLI(528 Сади майманок)",39.050738,65.428056,0,"Y","Koson",null],["KSN0134","Xurshid aka (qarliq)",39.089022,65.368731,0,"Y","MUBORAK",null],["KSN0311","OOO AZIZJON ASILBEK JAVOXIR (64  Азиз  Жавохир)",39.033219,65.583299,0,"Y","Koson",null],["KSN0364","OOO HUMOSHOX ZARINA OMAD BARAKA (297 Сардор Океан)",39.033633,65.585319,0,"Y","Koson",null],["KSN0162","YATT QODIROV SOBIR  (317 хусан майманок)",39.057949,65.409534,0,"Y","Koson",null],["KSN0263","310 FERUZ KOSON XAYOT",39.028736,65.568614,0,"Y","Koson",null],["KSN0145","OOO SHO'RTEPA NUR (219 Yangi hayot Elbek)",39.066701,65.397986,0,"Y","Koson",null],["KSN0238","MIRZO ORTIKOVICH MCHJ",38.984278,65.457233,0,"Y","KASPI",null],["KSN0224","бобур ака комилон (bobur aka komilon)",38.999571,65.430368,0,"Y","KASPI",null],["KSN0349","YATT UZOQOV SHAXBOZ (128 Шавки  хозмаг Косон)",39.028645,65.581517,0,"Y","Koson",null],["KSN0357","YATT MUZAFFAROV SHUHRAT (60 Аваз  Дунё  Акмал)",39.035182,65.583886,0,"Y","Koson",null],["KSN0254","YATT AXADOV LAZIZ (512 ЛАЗИЗ АКА КОСОН)",39.029068,65.576831,0,"Y","Koson",null],["KSN0073","Akmal maymanoq pavorot",39.028232,65.574463,0,"Y","Koson",null],["KSN0289","319 жура бобо каллик",39.107725,65.33911,0,"Y","MUBORAK",null],["KSN0043","Avaz aka maymanoq",39.040093,65.466321,0,"Y","Koson",null],["KSN0391","YATT Turdiyeva Muqaddas (SHOX KASPI)",38.928797,65.432421,0,"Y","Kasbi oqqamish mfy",null],["KSN0322","OOO MASHXURBEK PROFNASTIL (100 Xamza tunikachi)",39.02538,65.572829,0,"Y","Koson",null],["KSN0309","OOO SADULLO BOBO QODIROV (70 БАХРОМ ака Эсавой)",39.0217,65.503137,0,"Y","Koson",null],["KSN0274","OOO BENEFICIALL STROY   (299 ТАНГРИБЕРДИ)",38.844589,65.269339,0,"Y","MIRISHKOR TUMANI",null],["KSN0356","YATT ERGASHIV ABDUMAJID (56 Абдумажид  Женов)",38.930595,65.273772,0,"Y","MIRISHKOR TUMANI",null],["KSN0283","OOO ABDUGAFFOR ZAFARBEK (272   Улугбек   Женов)",38.935218,65.267239,0,"Y","MIRISHKOR TUMANI",null],["KSN0384","403 тулкин ака булмас 1",39.031041,65.708127,0,"Y","Koson",null],["KSN0401","QURILISH MOLLARI ( SHAVKAT AKA)",39.041235,65.743084,0,"Y","GUVALAK shaxarchasi",null],["KSN0396","Sunnat aka Guvalak",39.049539,65.728296,0,"Y","Qashqadaryo",null],["KSN0400","XO`JALIK MOLLARI (Ruslan aka)",39.047236,65.719348,0,"Y","Po`lati shaxarchasi",null],["KSN0394","Abduvaxob aka bulmas",39.022992,65.712268,0,"Y","Qashqadaryo",null],["KSN0291","YATT QOZIBOYEVA M (321 САРДОР БОЙГУНДИ)",39.009244,65.625775,0,"Y","Koson",null],["KSN0228","G'ayrat aka mudin",38.985036,65.690953,0,"Y","Koson",null],["KSN0132","YATT Oilaviy korxona (Jahongir aka bo'lmas)",39.044861,65.69014,0,"Y","Koson",null],["KSN0021","Sirojiddin aka b.o'  (Qishloq savdo)",39.046172,65.700213,0,"Y","Koson",null],["KSN0393","Farid aka bulmas",39.019417,65.712868,0,"Y","Qashqadaryo",null],["KSN0199","OOO BOYGONDI INVESTOR (202 Санжар пулоти паварот)",38.990459,65.656606,0,"Y","Koson",null],["KSN0214","Jamshid Aizabod",38.956802,65.294393,0,"Y","MIRISHKOR TUMANI",null],["KSN0331","OOO JEYNOV ASL SIFAT (252 ФОЗИЛХОН  ЖЕНАВ)",38.934164,65.269513,0,"Y","MIRISHKOR TUMANI",null],["KSN0143","Ramiz jenov",38.933183,65.270866,0,"Y","MIRISHKOR TUMANI",null],["KSN0089","Ziyodullox aka Ruziyev G'uzor",38.849085,66.061683,0,"Y","GUZOR",null],["KSN0002","Aziz aka Chiroqchi",39.024371,66.576212,0,"Y","CHIROQCHI",null],["KSN0141","Xusniddin chiroqchi",39.022235,66.551857,0,"Y","CHIROQCHI",null],["KSN0217","YATT Ergashev Abdulaziz (Abdulaziz aka Kitob)",39.201152,66.241603,0,"Y","KITOB TUMANI",null],["KSN0155","Yusuf aka Guzor (Toxir Zuxra)",38.842565,66.094122,0,"Y","GUZOR",null],["KSN0188","LAZIZBEK YETTOM IZDANIYA ( AMIR TEMUR SAVDO MARKAZI )",39.201259,66.24164,0,"Y","YETTITOM",null],["KSN0416","Furqat Aka 2765",39.031451,65.582806,0,"Y","Koson",null],["KSN0425","Sobir Aka 0022",39.036828,65.606733,0,"Y","Koson",null],["KSN0419","Oybek Aka 8454",39.020463,65.569402,0,"Y","Qashqadaryo",null],["KSN0424","Bobomurodov Ulugʻbek",39.006687,65.742254,0,"Y","Oqsalla qishlogʻi",null],["KSN0335","OOO ASR JEYNOV (158  Санжар Женов)",38.936039,65.274322,0,"Y","MIRISHKOR TUMANI",null],["KSN0392","Muxriddin bulmas",39.019332,65.713043,0,"Y","Qashqadaryo",null],["KSN0081","MUNAVVAROV SHAXRUXBEK MCHJ (БАХОДИР МРИШКОР)",38.889497,65.334757,0,"Y","MIRISHKOR",null],["KSN0147","217 Аббос  Женов) YATT BARNOYEV ABBOS",38.922267,65.260394,0,"Y","MIRISHKOR",null],["KSN0389","ISLOM JEYNOV",38.939186,65.277126,0,"Y","MIRISHKOR",null],["KSN0066","Azizbek Jiyan",39.033122,65.588377,0,"Y","Koson",null],["KSN0272","265  Сохиб  ака  мудин) OOO NASAF SAVDO MAJMUASI",38.968457,65.697977,0,"Y","Koson",null],["KSN0402","QURILISH MOLLARI ( G`OLIB AKA)",39.047505,65.722557,0,"Y","Po`lati shaxarchasi",null],["KSN0265","OOO SARDORBEK JEYNOV KORKI (295 Музаффар женов)",38.923378,65.279619,0,"Y","MIRISHKOR TUMANI",null],["KSN0327","OOO SHAXZOD SADDAMBEK (180 шахзод хужахайрон)",38.972923,65.353724,0,"Y","KASPI",null],["KSN0340","90 YANGI HAYOT KOSON) OOO HAMKOR BIZNES",39.033253,65.591898,0,"Y","Koson",null],["KSN0259","OOO UNIVERSAL XAMKOR SAVDO (280 Гиёс мудин)",38.99111,65.685197,0,"Y","Koson",null],["KSN0234","324 алишер ака оброн",39.009263,65.62584,0,"Y","Koson",null],["KSN0319","OOO BUYUK TURON TARAQQIYOT (68 Асрор  Косон)",39.044882,65.587519,0,"Y","Koson",null],["KSN0107","Ortiq jenayev",38.933727,65.27255,0,"Y","MIRISHKOR TUMANI",null],["KSN0034","jamoliddin Mudin",38.98681,65.689228,0,"Y","Koson",null],["KSN0350","OOO KOSON SANOAT MANTAJ (176 Илёс сарой)",39.033449,65.590083,0,"Y","Koson",null],["KSN0390","HAQBERDIYEV MURODULLO MCHJ (MURODULLO JEYNOV)",38.933957,65.269899,0,"Y","MIRISHKOR",null],["KSN0233","Xamza jenav",38.931339,65.273184,0,"Y","MIRISHKOR TUMANI",null],["KSN0320","OOO AIZABOD ASIL HAMKOR (80 Жалол)",38.962629,65.304691,0,"Y","MIRISHKOR TUMANI",null],["KSN0211","aziz guvalak (азиз гувалак)",39.051189,65.730357,0,"Y","Koson",null],["KSN0287","OOO KOSON BUNOKOR (ЖУРАБЕК БИНОКОР)",39.038168,65.607211,0,"Y","Koson",null],["KSN0051","OOO NEFRIT METAL SIFAT (230 МАКСУД МЕТАЛ СИФАТ)",39.062472,65.600477,0,"Y","Koson",null],["KSN0153","MCHJ Ibrohim BARAKA STROY",39.053007,65.593378,0,"Y","Koson",null],["KSN0395","Dilshod aka bulmas",39.027168,65.709968,0,"Y","Qashqadaryo",null],["KSN0023","Gulmira Market",39.0388,65.584996,0,"Y","Koson",null],["KSN0279","OOO KELAJAK MO'JIZASI (318 шахбоз женав)",38.934089,65.269719,0,"Y","MIRISHKOR TUMANI",null],["KSN0434","Rufat Qamashi",38.832542,65.374834,0,"Y","Qamashi",null],["KSN0422","Zafar Sum yuli",38.852584,65.791971,0,"Y","Koson",null],["KSN0427","Elbek aka 9149",38.894114,65.808324,0,"Y","Qarshi",null],["KSN0415","YTT KAMOLOV ABBOS",38.894604,65.807634,0,"Y","Qarshi",null],["KSN0412","Bayramali",38.895137,65.807484,0,"Y","Qarshi shahar",null]],"v":[[0,0,4,"1x1"],[0,1,3,"1x1"],[0,2,3,"1x1"],[0,3,2,"1x1"],[0,4,3,"1x1"],[0,5,3,"1x1"],[0,6,3,"1x1"],[0,7,3,"1x1"],[0,8,3,"1x1"],[0,9,3,"1x1"],[0,10,3,"1x1"],[0,11,3,"1x1"],[0,12,3,"1x1"],[0,13,3,"1x1"],[0,14,4,"1x1"],[0,15,4,"1x1"],[0,16,4,"1x1"],[0,17,6,"1x1"],[0,18,6,"1x1"],[0,19,6,"1x1"],[0,20,6,"1x1"],[0,21,6,"1x1"],[0,22,6,"1x1"],[0,23,6,"1x1"],[0,24,1,"1x1"],[0,25,4,"1x1"],[0,26,2,"1x1"],[0,27,3,"1x1"],[0,28,3,"1x1"],[0,29,4,"1x1"],[0,30,4,"1x1"],[0,31,4,"1x1"],[0,32,3,"1x1"],[0,33,4,"1x1"],[0,34,2,"1x1"],[0,35,4,"1x1"],[0,36,4,"1x1"],[0,37,4,"1x1"],[0,38,4,"1x1"],[0,39,2,"1x1"],[0,40,2,"1x1"],[0,41,2,"1x1"],[0,42,2,"1x1"],[0,43,2,"1x1"],[0,44,2,"1x1"],[0,45,2,"1x1"],[0,46,2,"1x1"],[0,47,2,"1x1"],[0,48,3,"1x1"],[0,49,1,"1x1"],[0,50,4,"1x1"],[0,51,4,"1x1"],[0,52,5,"1x1"],[0,53,5,"1x1"],[0,54,6,"1x1"],[0,55,6,"1x1"],[0,56,5,"1x1"],[0,57,2,"1x1"],[0,58,2,"1x1"],[0,59,5,"1x1"],[0,60,5,"1x1"],[0,61,5,"1x1"],[0,62,1,"1x1"],[0,63,1,"1x1"],[0,64,1,"1x1"],[0,65,5,"1x1"],[0,66,5,"1x1"],[0,67,5,"1x1"],[0,68,5,"1x1"],[0,69,1,"1x1"],[0,70,1,"1x1"],[0,71,5,"1x1"],[0,72,5,"1x1"],[0,73,1,"1x1"],[0,74,2,"1x1"],[0,75,3,"1x1"],[0,76,3,"1x1"],[0,77,3,"1x1"],[0,78,5,"1x1"],[0,79,5,"1x1"],[0,80,6,"1x1"],[0,81,1,"1x1"],[0,82,1,"1x1"],[0,83,1,"1x1"],[0,84,6,"1x1"],[0,85,6,"1x1"],[0,86,5,"1x1"],[0,87,1,"1x1"],[0,88,5,"1x1"],[0,89,5,"1x1"],[0,90,1,"1x1"],[0,91,6,"1x1"],[0,92,6,"1x1"],[0,93,6,"1x1"],[0,94,6,"1x1"],[0,95,1,"1x1"],[0,96,1,"1x1"],[1,95,6,"1x1"],[1,32,1,"1x1"],[1,96,6,"1x1"],[1,44,5,"1x1"],[1,84,1,"1x1"],[1,73,6,"1x1"],[1,3,5,"1x1"],[1,70,6,"1x1"],[1,54,1,"1x1"],[1,23,1,"1x1"],[1,45,5,"1x1"],[1,49,6,"1x1"],[1,92,1,"1x1"],[1,93,1,"1x1"],[1,22,1,"1x1"],[1,91,1,"1x1"],[1,21,1,"1x1"],[1,85,1,"1x1"],[1,18,1,"1x1"],[1,39,5,"1x1"],[1,69,6,"1x1"],[1,26,5,"1x1"],[1,7,6,"1x1"],[1,63,6,"1x1"],[1,81,6,"1x1"],[1,83,6,"1x1"],[1,55,5,"1x1"],[1,43,5,"1x1"],[1,74,5,"1x1"],[1,62,6,"1x1"],[1,46,5,"1x1"],[1,40,5,"1x1"],[1,42,5,"1x1"],[1,82,6,"1x1"],[1,24,6,"1x1"],[1,94,1,"1x1"],[1,17,1,"1x1"],[1,20,1,"1x1"],[1,19,1,"1x1"],[1,47,5,"1x1"],[1,41,5,"1x1"],[1,64,6,"1x1"],[1,79,2,"1x1"],[1,9,4,"1x1"],[1,1,4,"1x1"],[1,27,4,"1x1"],[1,8,4,"1x1"],[1,48,4,"1x1"],[1,4,4,"1x1"],[1,67,2,"1x1"],[1,71,2,"1x1"],[1,88,2,"1x1"],[1,86,2,"1x1"],[1,89,2,"1x1"],[1,97,4,"1x1"],[1,77,4,"1x1"],[1,75,4,"1x1"],[1,76,4,"1x1"],[1,57,5,"1x1"],[1,58,1,"1x1"],[1,80,1,"1x1"],[1,50,1,"1x1"],[1,87,6,"1x1"],[1,90,6,"1x1"],[1,98,5,"1x1"],[1,51,3,"1x1"],[1,28,4,"1x1"],[1,29,3,"1x1"],[1,15,3,"1x1"],[1,60,2,"1x1"],[1,10,4,"1x1"],[1,12,4,"1x1"],[1,99,6,"4x1"],[1,36,3,"1x1"],[1,31,3,"1x1"],[1,56,2,"1x1"],[1,72,2,"1x1"],[1,59,2,"1x1"],[1,35,3,"1x1"],[1,33,3,"1x1"],[1,34,3,"1x1"],[1,16,3,"1x1"],[1,78,2,"1x1"],[1,66,2,"1x1"],[1,52,2,"1x1"],[1,2,4,"1x1"],[1,0,3,"1x1"],[1,61,4,"1x1"],[1,11,4,"1x1"],[1,14,3,"1x1"],[1,6,4,"1x1"],[1,68,2,"1x1"],[1,65,2,"1x1"],[1,13,2,"1x1"],[1,30,3,"1x1"],[1,25,3,"1x1"],[1,37,3,"1x1"],[1,38,3,"1x1"],[1,53,2,"1x1"],[1,5,4,"1x1"],[2,100,4,"1x1"],[2,101,2,"1x1"],[2,102,3,"1x1"],[2,103,3,"1x1"],[2,104,3,"1x1"],[2,105,3,"1x1"],[2,106,2,"1x1"],[2,107,3,"1x1"],[2,108,3,"1x1"],[2,109,3,"1x1"],[2,110,3,"1x1"],[2,111,4,"1x1"],[2,112,4,"1x1"],[2,113,3,"1x1"],[2,114,3,"1x1"],[2,115,2,"1x1"],[2,116,3,"1x1"],[2,117,2,"1x1"],[2,118,4,"1x1"],[2,119,3,"1x1"],[2,120,3,"1x1"],[2,121,3,"1x1"],[2,122,4,"1x1"],[2,123,4,"1x1"],[2,124,4,"1x1"],[2,125,4,"1x1"],[2,126,4,"1x1"],[2,127,2,"1x1"],[2,128,2,"1x1"],[2,129,2,"1x1"],[2,130,4,"1x1"],[2,131,4,"1x1"],[2,132,2,"1x1"],[2,133,2,"1x1"],[2,134,2,"1x1"],[2,135,3,"1x1"],[2,136,3,"1x1"],[2,137,4,"1x1"],[2,138,4,"1x1"],[2,139,4,"1x1"],[2,140,2,"1x1"],[2,141,2,"1x1"],[2,142,2,"1x1"],[2,143,3,"1x1"],[2,144,2,"1x1"],[2,145,2,"1x1"],[2,146,1,"1x1"],[2,147,1,"1x1"],[2,148,1,"1x1"],[2,149,6,"1x1"],[2,150,6,"1x1"],[2,151,6,"1x1"],[2,152,6,"1x1"],[2,153,6,"1x1"],[2,154,5,"1x1"],[2,155,5,"1x1"],[2,156,6,"1x1"],[2,157,6,"1x1"],[2,158,6,"1x1"],[2,159,5,"1x1"],[2,160,1,"1x1"],[2,161,1,"1x1"],[2,162,1,"1x1"],[2,163,6,"4x1"],[2,164,6,"4x1"],[2,165,6,"4x1"],[2,166,6,"4x1"],[2,167,6,"4x1"],[2,168,6,"4x1"],[2,169,4,"1x1"],[2,170,4,"1x1"],[2,171,2,"1x1"],[2,172,6,"1x1"],[2,173,1,"1x1"],[2,174,6,"1x1"],[2,175,1,"1x1"],[2,176,1,"1x1"],[2,177,1,"1x1"],[2,178,5,"1x1"],[2,179,5,"1x1"],[2,180,6,"1x1"],[2,181,1,"1x1"],[2,182,1,"1x1"],[2,183,5,"1x1"],[2,184,5,"1x1"],[2,185,5,"1x1"],[2,186,5,"1x1"],[2,187,1,"1x1"],[2,188,5,"1x1"],[2,189,5,"1x1"],[2,190,1,"1x1"],[2,191,1,"1x1"],[2,192,1,"1x1"],[2,193,6,"1x1"],[2,194,5,"1x1"],[2,195,5,"1x1"],[2,196,5,"1x1"],[2,197,6,"1x1"],[2,198,5,"1x1"],[2,199,1,"1x1"],[2,200,3,"1x1"],[3,103,4,"1x1"],[3,102,4,"1x1"],[3,111,3,"1x1"],[3,124,3,"1x1"],[3,138,3,"1x1"],[3,155,2,"1x1"],[3,189,2,"1x1"],[3,194,2,"1x1"],[3,105,4,"1x1"],[3,121,4,"1x1"],[3,196,2,"1x1"],[3,195,2,"1x1"],[3,169,3,"1x1"],[3,170,3,"1x1"],[3,172,1,"1x1"],[3,171,5,"1x1"],[3,165,1,"4x1"],[3,167,1,"4x1"],[3,166,1,"4x1"],[3,163,1,"4x1"],[3,164,1,"4x1"],[3,168,1,"4x1"],[3,179,2,"1x1"],[3,178,2,"1x1"],[3,154,2,"1x1"],[3,186,2,"1x1"],[3,188,2,"1x1"],[3,139,3,"1x1"],[3,125,3,"1x1"],[3,122,3,"1x1"],[3,123,3,"1x1"],[3,112,3,"1x1"],[3,137,3,"1x1"],[3,126,3,"1x1"],[3,119,4,"1x1"],[3,104,4,"1x1"],[3,108,4,"1x1"],[3,159,2,"1x1"],[3,183,2,"1x1"],[3,185,2,"1x1"],[3,184,2,"1x1"],[3,109,4,"1x1"],[3,135,4,"1x1"],[3,136,4,"1x1"],[3,116,4,"1x1"],[3,143,4,"1x1"],[3,113,4,"1x1"],[3,130,3,"1x1"],[3,198,2,"1x1"],[3,114,4,"1x1"],[3,107,4,"1x1"],[3,110,4,"1x1"],[3,120,4,"1x1"],[3,100,3,"1x1"],[3,131,3,"1x1"],[3,132,5,"1x1"],[3,150,1,"1x1"],[3,149,1,"1x1"],[3,146,6,"1x1"],[3,177,6,"1x1"],[3,147,6,"1x1"],[3,142,5,"1x1"],[3,140,5,"1x1"],[3,156,1,"1x1"],[3,157,1,"1x1"],[3,151,1,"1x1"],[3,174,1,"1x1"],[3,158,1,"1x1"],[3,180,1,"1x1"],[3,115,5,"1x1"],[3,145,5,"1x1"],[3,118,5,"1x1"],[3,117,5,"1x1"],[3,127,5,"1x1"],[3,129,5,"1x1"],[3,197,1,"1x1"],[3,153,1,"1x1"],[3,148,6,"1x1"],[3,162,6,"1x1"],[3,161,6,"1x1"],[3,190,6,"1x1"],[3,128,5,"1x1"],[3,133,5,"1x1"],[3,144,5,"1x1"],[3,101,5,"1x1"],[3,134,5,"1x1"],[3,160,6,"1x1"],[3,199,6,"1x1"],[3,191,6,"1x1"],[3,182,6,"1x1"],[3,152,1,"1x1"],[3,192,6,"1x1"],[3,193,1,"1x1"],[3,106,5,"1x1"],[3,141,5,"1x1"],[3,175,6,"1x1"],[3,187,6,"1x1"],[3,181,6,"1x1"],[3,176,6,"1x1"],[3,173,6,"1x1"],[3,200,4,"1x1"],[4,103,4,"1x1"],[4,102,4,"1x1"],[4,111,3,"1x1"],[4,124,3,"1x1"],[4,138,3,"1x1"],[4,155,2,"1x1"],[4,189,2,"1x1"],[4,194,2,"1x1"],[4,105,4,"1x1"],[4,121,4,"1x1"],[4,196,2,"1x1"],[4,195,2,"1x1"],[4,169,3,"1x1"],[4,170,3,"1x1"],[4,172,1,"1x1"],[4,171,5,"1x1"],[4,165,1,"4x1"],[4,167,1,"4x1"],[4,166,1,"4x1"],[4,163,1,"4x1"],[4,164,1,"4x1"],[4,168,1,"4x1"],[4,179,2,"1x1"],[4,178,2,"1x1"],[4,154,2,"1x1"],[4,186,2,"1x1"],[4,188,2,"1x1"],[4,139,3,"1x1"],[4,125,3,"1x1"],[4,122,3,"1x1"],[4,123,3,"1x1"],[4,112,3,"1x1"],[4,137,3,"1x1"],[4,126,3,"1x1"],[4,119,4,"1x1"],[4,104,4,"1x1"],[4,108,4,"1x1"],[4,159,2,"1x1"],[4,183,2,"1x1"],[4,185,2,"1x1"],[4,184,2,"1x1"],[4,109,4,"1x1"],[4,135,4,"1x1"],[4,136,4,"1x1"],[4,116,4,"1x1"],[4,143,4,"1x1"],[4,113,4,"1x1"],[4,130,3,"1x1"],[4,198,2,"1x1"],[4,114,4,"1x1"],[4,107,4,"1x1"],[4,110,4,"1x1"],[4,120,4,"1x1"],[4,100,3,"1x1"],[4,131,3,"1x1"],[4,132,5,"1x1"],[4,150,1,"1x1"],[4,149,1,"1x1"],[4,146,6,"1x1"],[4,177,6,"1x1"],[4,147,6,"1x1"],[4,142,5,"1x1"],[4,140,5,"1x1"],[4,156,1,"1x1"],[4,157,1,"1x1"],[4,151,1,"1x1"],[4,174,1,"1x1"],[4,158,1,"1x1"],[4,180,1,"1x1"],[4,115,5,"1x1"],[4,145,5,"1x1"],[4,118,5,"1x1"],[4,117,5,"1x1"],[4,127,5,"1x1"],[4,129,5,"1x1"],[4,197,1,"1x1"],[4,153,1,"1x1"],[4,148,6,"1x1"],[4,162,6,"1x1"],[4,161,6,"1x1"],[4,190,6,"1x1"],[4,128,5,"1x1"],[4,133,5,"1x1"],[4,144,5,"1x1"],[4,101,5,"1x1"],[4,134,5,"1x1"],[4,160,6,"1x1"],[4,199,6,"1x1"],[4,191,6,"1x1"],[4,182,6,"1x1"],[4,152,1,"1x1"],[4,192,6,"1x1"],[4,193,1,"1x1"],[4,106,5,"1x1"],[4,141,5,"1x1"],[4,175,6,"1x1"],[4,187,6,"1x1"],[4,181,6,"1x1"],[4,176,6,"1x1"],[4,173,6,"1x1"],[5,92,6,"1x1"],[5,54,6,"1x1"],[5,65,5,"1x1"],[5,59,5,"1x1"],[5,60,5,"1x1"],[5,75,3,"1x1"],[5,80,6,"1x1"],[5,21,6,"1x1"],[5,67,5,"1x1"],[5,97,3,"1x1"],[5,201,3,"1x1"],[5,17,6,"1x1"],[5,53,5,"1x1"],[5,18,6,"1x1"],[5,72,5,"1x1"],[5,79,5,"1x1"],[5,88,5,"1x1"],[5,89,5,"1x1"],[5,86,5,"1x1"],[5,87,1,"1x1"],[5,51,4,"1x1"],[5,202,2,"1x1"],[5,57,2,"1x1"],[5,58,2,"1x1"],[5,203,2,"1x1"],[5,37,4,"1x1"],[5,11,3,"1x1"],[5,12,3,"1x1"],[5,24,4,"1x1"],[5,38,4,"1x1"],[5,46,2,"1x1"],[5,27,3,"1x1"],[5,28,3,"1x1"],[5,9,3,"1x1"],[5,8,3,"1x1"],[5,7,1,"1x1"],[5,6,1,"1x1"],[5,10,3,"1x1"],[5,47,2,"1x1"],[5,26,2,"1x1"],[5,39,2,"1x1"],[5,31,4,"1x1"],[5,30,4,"1x1"],[5,23,6,"1x1"],[5,74,6,"1x1"],[5,22,6,"1x1"],[5,82,1,"1x1"],[5,69,1,"1x1"],[5,70,1,"1x1"],[5,64,1,"1x1"],[5,73,1,"1x1"],[5,93,6,"1x1"],[5,94,6,"1x1"],[5,19,6,"1x1"],[5,95,1,"1x1"],[5,83,1,"1x1"],[5,63,1,"1x1"],[5,62,1,"1x1"],[5,49,1,"1x1"],[5,96,1,"1x1"],[5,55,2,"1x1"],[5,36,4,"1x1"],[5,204,2,"1x1"],[5,34,4,"1x1"],[5,33,4,"1x1"],[5,4,3,"1x1"],[5,5,3,"1x1"],[5,1,3,"1x1"],[5,15,4,"1x1"],[5,78,5,"1x1"],[5,66,5,"1x1"],[5,85,6,"1x1"],[5,81,1,"1x1"],[5,91,6,"1x1"],[5,20,6,"1x1"],[5,84,6,"1x1"],[5,71,5,"1x1"],[5,77,3,"1x1"],[5,76,3,"1x1"],[5,0,4,"1x1"],[5,3,2,"1x1"],[5,48,3,"1x1"],[5,44,2,"1x1"],[5,16,4,"1x1"],[5,43,2,"1x1"],[5,40,2,"1x1"],[5,13,3,"1x1"],[5,2,3,"1x1"],[5,32,4,"1x1"],[5,42,2,"1x1"],[5,41,2,"1x1"],[5,35,4,"1x1"],[5,52,5,"1x1"],[5,68,5,"1x1"],[5,61,5,"1x1"],[5,56,5,"1x1"],[5,45,2,"1x1"],[5,25,4,"1x1"]]}</script>
+<script>
+(function(){
+const D=JSON.parse(document.getElementById('data').textContent);
+const SRC="Koson · 6 agent · 597 visit · plan 19.11.2026 holatiga";
+const NOSALDO=true;
+const BACK="index.html";
+const ROWS=D.v.map(([a,c,day,wk])=>{const A=D.a[a],C=D.c[c];return{vil:A[0],agent:A[1],loyiha:A[2],kod:A[3],code:C[0],name:C[1],lat:C[2],lon:C[3],saldo:C[4]||0,faol:C[5],hudud:C[6],distr:C[7],day,wk};});
+const DAYS=[{d:1,s:'Du',l:'Dushanba'},{d:2,s:'Se',l:'Seshanba'},{d:3,s:'Chor',l:'Chorshanba'},{d:4,s:'Pay',l:'Payshanba'},{d:5,s:'Ju',l:'Juma'},{d:6,s:'Sha',l:'Shanba'}];
+const DAYCOL={1:'#2f6fd6',2:'#d6492f',3:'#1f9a6b',4:'#9a4fd0',5:'#d99412',6:'#13a3b8'};
+const WK={'1x1':'har hafta','2x1':'2 haftada 1','4x1':'4 haftada 1'};
+const $=id=>document.getElementById(id);
+const fmt=(n,d=2)=>Number(n).toLocaleString('ru-RU',{minimumFractionDigits:0,maximumFractionDigits:d});
+const esc=s=>String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+let state={vil:null,agent:null,day:1,sel:null},road=null; // road: {key, legs:[km], total, geo}
+const km=(a,b)=>{const p=Math.PI/180,dla=(b.lat-a.lat)*p,dlo=(b.lon-a.lon)*p;const h=Math.sin(dla/2)**2+Math.cos(a.lat*p)*Math.cos(b.lat*p)*Math.sin(dlo/2)**2;return 12742*Math.asin(Math.sqrt(h));};
+function order(pts){ // eng yaqin qo'shni: g'arbdagi nuqtadan boshlab
+  if(pts.length<2)return pts.slice();
+  const left=pts.slice();let cur=left.reduce((m,p)=>p.lon<m.lon?p:m,left[0]);left.splice(left.indexOf(cur),1);const out=[cur];
+  while(left.length){let bi=0,bd=Infinity;left.forEach((p,i)=>{const d=km(cur,p);if(d<bd){bd=d;bi=i;}});cur=left.splice(bi,1)[0];out.push(cur);}
+  return out;
+}
+// ---- map
+const map=L.map('map',{preferCanvas:false});
+const base={
+  "Ko'cha xaritasi (CARTO)":L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png',{maxZoom:19,attribution:'&copy; OpenStreetMap, &copy; CARTO'}),
+  "OpenStreetMap":L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'&copy; OpenStreetMap'}),
+  "Sun'iy yo'ldosh (Esri)":L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',{maxZoom:19,attribution:'&copy; Esri'})
+};
+base["Ko'cha xaritasi (CARTO)"].addTo(map);
+L.control.layers(base,null,{position:'topright'}).addTo(map);
+L.control.scale({metric:true,imperial:false}).addTo(map);
+const gOthers=L.layerGroup().addTo(map),gRoute=L.layerGroup().addTo(map),gKm=L.layerGroup().addTo(map),gPts=L.layerGroup().addTo(map);
+const legend=L.control({position:'bottomleft'});legend.onAdd=()=>{const d=L.DomUtil.create('div','legend');d.id='legend';return d;};legend.addTo(map);
+map.setView([40.5,66.5],6);
+const markers=new Map();
+// ---- data helpers
+const agentRows=()=>ROWS.filter(r=>r.vil===state.vil&&r.agent===state.agent);
+function current(){ // kun tanlansa — marshrut tartibida
+  const rows=agentRows().filter(r=>!state.day||r.day===state.day);
+  const res=[];
+  DAYS.forEach(x=>{if(state.day&&x.d!==state.day)return;
+    const dr=rows.filter(r=>r.day===x.d);const withC=order(dr.filter(r=>r.lat!=null));const noC=dr.filter(r=>r.lat==null);
+    withC.forEach((r,i)=>{r._n=i+1;r._prev=i?km(withC[i-1],r):null;res.push(r);});
+    noC.forEach(r=>{r._n=null;r._prev=null;res.push(r);});
+  });
+  return res;
+}
+const key=()=>state.agent+'|'+state.day;
+function fillVil(){const vs=[...new Set(ROWS.map(r=>r.vil))].sort();$('vil').innerHTML=vs.map(v=>`<option>${esc(v)}</option>`).join('');state.vil=vs[0];}
+function fillAgents(){const m=new Map();ROWS.forEach(r=>{if(r.vil===state.vil&&!m.has(r.agent))m.set(r.agent,r);});const as=[...m.values()].sort((a,b)=>a.agent.localeCompare(b.agent));
+  $('agent').innerHTML=as.map(a=>`<option value="${esc(a.agent)}">${esc(a.agent)}${a.loyiha?' — '+esc(a.loyiha):''}</option>`).join('');state.agent=as.length?as[0].agent:null;}
+function drawDays(){
+  const c={};DAYS.forEach(x=>c[x.d]=new Set());agentRows().forEach(r=>c[r.day].add(r.code));
+  const tot=agentRows().length;
+  const b=(d,lab,n,low,col)=>`<button type="button" data-d="${d}" aria-pressed="${state.day===d}" class="${low?'low':''}">${col?`<span class="sw" style="background:${col}"></span>`:''}${lab}<span class="n">${n}</span></button>`;
+  $('days').innerHTML=b(0,'Hafta',tot,false,null)+DAYS.map(x=>b(x.d,x.s,c[x.d].size,c[x.d].size<15,DAYCOL[x.d])).join('');
+  $('days').querySelectorAll('button').forEach(el=>el.onclick=()=>{state.day=+el.dataset.d;state.sel=null;render(true);});
+}
+function stats(rows){
+  const coord=rows.filter(r=>r.lat!=null),debt=rows.filter(r=>r.saldo>0),nof=rows.filter(r=>r.faol==='N');
+  const line=rows.reduce((s,r)=>s+(r._prev||0),0);
+  const rd=road&&road.key===key()?road.total:null;
+  const n=rows.length,low=state.day&&n<15;
+  let t=[[n,state.day?"Do'konlar (kun)":'Visitlar (hafta)',low?'bad':''],[fmt(line,1)+' km',"To'g'ri chiziq bo'yicha",''],
+    [rd!=null?fmt(rd,1)+' km':'—',"Yo'l bo'yicha",rd!=null?'ok':''],[rows.length-coord.length,'Koordinatasiz',rows.length-coord.length?'warn':'ok'],
+    [debt.length+' ta','Qarzli · '+fmt(debt.reduce((s,r)=>s+r.saldo,0)),''],[nof.length,'Nofaol mijoz',nof.length?'bad':'ok']];
+  if(NOSALDO)t=t.filter(x=>!String(x[1]).startsWith('Qarzli'));
+  $('stats').innerHTML=t.map(x=>`<div class="stat ${x[2]}"><b>${x[0]}</b><span>${x[1]}</span></div>`).join('')+(state.day?`<div style="grid-column:1/-1">${low?`<span class="pill bad">15 tadan kam: ${15-n} ta yetmaydi</span>`:`<span class="pill ok">15 talik shart bajarilgan</span>`}</div>`:'');
+}
+const links=r=>r.lat==null?'<span class="nocoord">koordinata yo\'q</span>':`<a href="https://www.google.com/maps?q=${r.lat},${r.lon}" target="_blank" rel="noopener">Google</a> · <a href="https://yandex.uz/maps/?pt=${r.lon},${r.lat}&z=17&l=map" target="_blank" rel="noopener">Yandex</a>`;
+function popup(r){
+  const ag=[...new Set(ROWS.filter(x=>x.code===r.code).map(x=>`${DAYS[x.day-1].s}: ${x.agent}`))];
+  const rl=road&&road.key===key()&&r._n>1?road.legs[r._n-2]:null;
+  return `<div class="pop"><b>${r._n?r._n+'. ':''}${esc(r.name)}</b><dl><dt>Kod</dt><dd>${esc(r.code)}</dd><dt>Kun</dt><dd>${DAYS[r.day-1].l}, ${WK[r.wk]||esc(r.wk)}</dd>
+  ${r._prev!=null?`<dt>Oldingisidan</dt><dd>${fmt(r._prev,1)} km${rl!=null?' (yo\'l: '+fmt(rl,1)+' km)':''}</dd>`:''}
+  ${NOSALDO?'':`<dt>Saldo</dt><dd>${fmt(r.saldo)}</dd>`}<dt>Holat</dt><dd>${r.faol==='N'?'<b style="color:#b3261e">Nofaol</b>':'Faol'}</dd><dt>Hudud</dt><dd>${esc(r.hudud||'—')}</dd>
+  <dt>Agentlar</dt><dd>${ag.map(esc).join('<br>')}</dd></dl>${links(r)}</div>`;
+}
+function drawMap(fit){
+  gOthers.clearLayers();gRoute.clearLayers();gKm.clearLayers();gPts.clearLayers();markers.clear();
+  const rows=current().filter(r=>r.lat!=null);
+  if($('others').checked&&state.day){
+    const mine=new Set(rows.map(r=>r.code));
+    ROWS.filter(r=>r.vil===state.vil&&r.day===state.day&&r.agent!==state.agent&&r.lat!=null&&!mine.has(r.code)).forEach(r=>
+      L.circleMarker([r.lat,r.lon],{radius:4,color:'#667',weight:1,fillColor:'#99a',fillOpacity:.5}).bindTooltip(`${esc(r.name)}<br>${esc(r.agent)}`).addTo(gOthers));
+  }
+  const rd=road&&road.key===key()?road:null;
+  DAYS.forEach(x=>{
+    const dr=rows.filter(r=>r.day===x.d);if(!dr.length)return;
+    if($('route').checked&&dr.length>1){
+      if(rd&&rd.geo)L.polyline(rd.geo,{color:DAYCOL[x.d],weight:4,opacity:.75}).addTo(gRoute);
+      else L.polyline(dr.map(r=>[r.lat,r.lon]),{color:DAYCOL[x.d],weight:2.5,opacity:.7,dashArray:'6 5'}).addTo(gRoute);
+    }
+    if($('kmlab').checked&&dr.length>1){
+      for(let i=1;i<dr.length;i++){const a=dr[i-1],b=dr[i];
+        const v=rd?rd.legs[i-1]:dr[i]._prev;
+        L.tooltip({permanent:true,direction:'center',className:'km'+(rd?' road':'')}).setLatLng([(a.lat+b.lat)/2,(a.lon+b.lon)/2]).setContent(fmt(v,1)+' km').addTo(gKm);}
+    }
+  });
+  rows.forEach(r=>{
+    const big=!NOSALDO&&r.saldo>0,size=state.day?(big?24:20):(big?14:10);
+    const m=state.day?L.marker([r.lat,r.lon],{icon:L.divIcon({className:'',html:`<div class="num-ic ${r.faol==='N'?'nof':''}" style="width:${size}px;height:${size}px;background:${DAYCOL[r.day]}">${r._n||''}</div>`,iconSize:[size,size],iconAnchor:[size/2,size/2]})})
+      :L.circleMarker([r.lat,r.lon],{radius:big?7:5,color:r.faol==='N'?'#b3261e':'#fff',weight:r.faol==='N'?2.5:1,fillColor:DAYCOL[r.day],fillOpacity:.95});
+    m.bindPopup(()=>popup(r),{maxWidth:320});m.on('click',()=>{state.sel=r.code+'|'+r.day;highlight();});
+    m.addTo(gPts);markers.set(r.code+'|'+r.day,m);
+  });
+  const lg=$('legend');if(lg){const ds=state.day?[DAYS[state.day-1]]:DAYS;lg.innerHTML=ds.map(x=>`<span><i style="background:${DAYCOL[x.d]}"></i>${x.l}</span>`).join('<br>')+`<br><span><i style="border:2px solid #b3261e"></i>nofaol</span>${NOSALDO?'':'<br><span>katta nuqta — qarzli</span>'}${state.day?'<br><span>raqam — marshrut tartibi</span>':''}`;}
+  if(fit){const pts=rows.map(r=>[r.lat,r.lon]);if(pts.length)map.fitBounds(pts,{padding:[30,30],maxZoom:15});}
+}
+function table(rows){
+  const q=$('q').value.trim().toLowerCase();
+  const list=rows.filter(r=>!q||r.code.toLowerCase().includes(q)||String(r.name).toLowerCase().includes(q));
+  const rd=road&&road.key===key()?road:null;
+  $('tblTitle').textContent=`${state.agent||''} — ${state.day?DAYS[state.day-1].l:'butun hafta'} (${list.length})`;
+  if(!list.length){$('tbody').innerHTML='<tr><td colspan="10" class="empty">Visit topilmadi</td></tr>';return;}
+  $('tbody').innerHTML=list.map(r=>`<tr data-k="${esc(r.code)}|${r.day}" class="${state.sel===r.code+'|'+r.day?'sel':''}"><td class="num">${r._n||'—'}</td><td><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${DAYCOL[r.day]};margin-right:6px"></span>${DAYS[r.day-1].s}</td><td>${esc(r.code)}</td><td>${esc(r.name)}</td><td>${WK[r.wk]||esc(r.wk)}</td><td class="num">${r._prev!=null?fmt(r._prev,1):''}</td><td class="num">${rd&&r._n>1?fmt(rd.legs[r._n-2],1):''}</td>${NOSALDO?'':`<td class="num">${fmt(r.saldo)}</td>`}<td>${r.faol==='N'?'<span class="pill bad">Nofaol</span>':'<span class="pill ok">Faol</span>'}</td><td>${links(r)}</td></tr>`).join('');
+  $('tbody').querySelectorAll('tr[data-k]').forEach(tr=>tr.onclick=e=>{if(e.target.tagName==='A')return;state.sel=tr.dataset.k;highlight();const m=markers.get(state.sel);if(m){map.setView(m.getLatLng(),Math.max(map.getZoom(),15));m.openPopup();}});
+}
+function highlight(){document.querySelectorAll('#tbody tr').forEach(tr=>tr.classList.toggle('sel',tr.dataset.k===state.sel));const tr=document.querySelector(`#tbody tr[data-k="${CSS.escape(state.sel||'')}"]`);if(tr)tr.scrollIntoView({block:'nearest'});}
+function render(fit){drawDays();const rows=current();stats(rows);table(rows);drawMap(fit);$('road').disabled=!state.day;}
+async function roadCalc(){
+  const rows=current().filter(r=>r.lat!=null);
+  if(!state.day||rows.length<2)return;
+  $('road').disabled=true;$('roadNote').textContent="Yo'l bo'yicha masofa hisoblanmoqda…";
+  try{
+    const legs=[],geo=[];
+    for(let s=0;s<rows.length-1;s+=79){ // OSRM: bir so'rovda 80 nuqtagacha
+      const part=rows.slice(s,s+80);
+      const url='https://router.project-osrm.org/route/v1/driving/'+part.map(r=>r.lon+','+r.lat).join(';')+'?overview=full&geometries=geojson';
+      const res=await fetch(url);if(!res.ok)throw new Error('HTTP '+res.status);
+      const j=await res.json();if(j.code!=='Ok')throw new Error(j.code);
+      j.routes[0].legs.forEach(l=>legs.push(l.distance/1000));
+      j.routes[0].geometry.coordinates.forEach(c=>geo.push([c[1],c[0]]));
+    }
+    road={key:key(),legs,total:legs.reduce((a,b)=>a+b,0),geo};
+    $('roadNote').textContent=`Yo'l bo'yicha: ${fmt(road.total,1)} km (OSRM, avtomobil yo'li; tartib — eng yaqin nuqta bo'yicha).`;
+    render(false);
+  }catch(e){$('roadNote').textContent="Yo'l bo'yicha hisoblab bo'lmadi ("+e.message+"). Internetni tekshiring yoki keyinroq urinib ko'ring. To'g'ri chiziq bo'yicha km ko'rsatilmoqda.";}
+  $('road').disabled=!state.day;
+}
+$('vil').onchange=e=>{state.vil=e.target.value;fillAgents();state.day=1;state.sel=null;render(true);};
+$('agent').onchange=e=>{state.agent=e.target.value;state.sel=null;render(true);};
+['route','kmlab','others'].forEach(id=>$(id).onchange=()=>drawMap(false));
+$('q').oninput=()=>table(current());
+$('fit').onclick=()=>drawMap(true);
+$('road').onclick=roadCalc;
+$('src').textContent=SRC;
+if(NOSALDO)document.querySelectorAll('.saldo-col').forEach(e=>e.remove());
+if(BACK){const a=document.createElement('a');a.href=BACK;a.textContent='← Barcha viloyatlar';a.style.cssText='color:var(--accent);font-weight:600;font-size:13px';document.querySelector('header').prepend(a);}
+fillVil();fillAgents();render(true);
+})();
+</script>
+</body>
+</html>
