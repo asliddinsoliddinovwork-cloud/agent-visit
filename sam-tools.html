@@ -133,11 +133,11 @@ function order(pts){ // eng yaqin qo'shni: g'arbdagi nuqtadan boshlab
 // ---- map
 const map=L.map('map',{preferCanvas:false});
 const base={
-  "Ko'cha xaritasi (CARTO)":L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png',{maxZoom:19,attribution:'&copy; OpenStreetMap, &copy; CARTO'}),
+  "Ko'cha xaritasi (Esri)":L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}',{maxZoom:19,attribution:'&copy; Esri, HERE, Garmin, OpenStreetMap'}),
   "OpenStreetMap":L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'&copy; OpenStreetMap'}),
   "Sun'iy yo'ldosh (Esri)":L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',{maxZoom:19,attribution:'&copy; Esri'})
 };
-base["Ko'cha xaritasi (CARTO)"].addTo(map);
+base["Ko'cha xaritasi (Esri)"].addTo(map);
 L.control.layers(base,null,{position:'topright'}).addTo(map);
 L.control.scale({metric:true,imperial:false}).addTo(map);
 const gOthers=L.layerGroup().addTo(map),gRoute=L.layerGroup().addTo(map),gKm=L.layerGroup().addTo(map),gPts=L.layerGroup().addTo(map);
