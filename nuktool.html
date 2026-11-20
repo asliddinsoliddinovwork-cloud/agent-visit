@@ -79,6 +79,7 @@ tbody tr{cursor:pointer} tbody tr:hover,tr.sel{background:var(--accent-soft)}
     <div class="card fields">
       <div><label class="f" for="vil">Viloyat</label><select id="vil"></select></div>
       <div><label class="f" for="agent">Agent</label><select id="agent"></select></div>
+      <div><label class="f" for="week">Hafta</label><select id="week"><option value="A">A hafta (23.11, 07.12, …)</option><option value="B">B hafta (30.11, 14.12, …)</option><option value="all">Ikkala hafta</option></select></div>
       <div><label class="f" id="daysLbl">Kun</label><div class="days" id="days" role="group" aria-labelledby="daysLbl"></div></div>
       <label class="chk" for="route"><input type="checkbox" id="route" checked> Marshrut chizig'i</label>
       <label class="chk" for="kmlab"><input type="checkbox" id="kmlab" checked> Nuqtalar orasidagi km</label>
@@ -108,7 +109,7 @@ tbody tr{cursor:pointer} tbody tr:hover,tr.sel{background:var(--accent-soft)}
   </main>
 </div>
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-<script id="data" type="application/json">{"a":[["Nuktool","Ibrayimov Naurizbek NK07","Ockean, Tools","NK07"]],"c":[["NKT0222","Ilhamjan Ametov Duysenbaevich YaTT (Gone qala)",42.463677,59.58962,0,"Y","Qoraqalpogiston Respublikasi",null],["NKT0223","PERDEBAY JUMAMURATOV YaTT",42.415849,59.426348,0,"Y","Xojayli Shahar",null]],"v":[[0,0,3,"2x1"],[0,1,3,"1x1"]]}</script>
+<script id="data" type="application/json">{"a":[["Nuktool","Ibrayimov Naurizbek NK07","Ockean, Tools","NK07"]],"c":[["NKT0222","Ilhamjan Ametov Duysenbaevich YaTT (Gone qala)",42.463677,59.58962,0,"Y","Qoraqalpogiston Respublikasi",null],["NKT0223","PERDEBAY JUMAMURATOV YaTT",42.415849,59.426348,0,"Y","Xojayli Shahar",null]],"v":[[0,0,3,"1x1"],[0,1,3,"1x1"]]}</script>
 <script>
 (function(){
 const D=JSON.parse(document.getElementById('data').textContent);
@@ -118,11 +119,11 @@ const BACK="index.html";
 const ROWS=D.v.map(([a,c,day,wk])=>{const A=D.a[a],C=D.c[c];return{vil:A[0],agent:A[1],loyiha:A[2],kod:A[3],code:C[0],name:C[1],lat:C[2],lon:C[3],saldo:C[4]||0,faol:C[5],hudud:C[6],distr:C[7],day,wk};});
 const DAYS=[{d:1,s:'Du',l:'Dushanba'},{d:2,s:'Se',l:'Seshanba'},{d:3,s:'Chor',l:'Chorshanba'},{d:4,s:'Pay',l:'Payshanba'},{d:5,s:'Ju',l:'Juma'},{d:6,s:'Sha',l:'Shanba'}];
 const DAYCOL={1:'#2f6fd6',2:'#d6492f',3:'#1f9a6b',4:'#9a4fd0',5:'#d99412',6:'#13a3b8'};
-const WK={'1x1':'har hafta','2x1':'2 haftada 1','4x1':'4 haftada 1'};
+const WK={'1x1':'har hafta','2x1A':'2 haftada 1 (A)','2x1B':'2 haftada 1 (B)','2x1':'2 haftada 1','4x1':'4 haftada 1'};
 const $=id=>document.getElementById(id);
 const fmt=(n,d=2)=>Number(n).toLocaleString('ru-RU',{minimumFractionDigits:0,maximumFractionDigits:d});
 const esc=s=>String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
-let state={vil:null,agent:null,day:1,sel:null},road=null; // road: {key, legs:[km], total, geo}
+let state={vil:null,agent:null,day:1,sel:null,week:'A'},road=null; // road: {key, legs:[km], total, geo}
 const km=(a,b)=>{const p=Math.PI/180,dla=(b.lat-a.lat)*p,dlo=(b.lon-a.lon)*p;const h=Math.sin(dla/2)**2+Math.cos(a.lat*p)*Math.cos(b.lat*p)*Math.sin(dlo/2)**2;return 12742*Math.asin(Math.sqrt(h));};
 function order(pts){ // eng yaqin qo'shni: g'arbdagi nuqtadan boshlab
   if(pts.length<2)return pts.slice();
@@ -147,7 +148,8 @@ const legend=L.control({position:'bottomleft'});legend.onAdd=()=>{const d=L.DomU
 map.setView([40.5,66.5],6);
 const markers=new Map();
 // ---- data helpers
-const agentRows=()=>ROWS.filter(r=>r.vil===state.vil&&r.agent===state.agent);
+const inWeek=r=>state.week==='all'||r.wk==='1x1'||r.wk==='2x1'+state.week||!String(r.wk).startsWith('2x1');
+const agentRows=()=>ROWS.filter(r=>r.vil===state.vil&&r.agent===state.agent&&inWeek(r));
 function current(){ // kun tanlansa — marshrut tartibida
   const rows=agentRows().filter(r=>!state.day||r.day===state.day);
   const res=[];
@@ -158,7 +160,7 @@ function current(){ // kun tanlansa — marshrut tartibida
   });
   return res;
 }
-const key=()=>state.agent+'|'+state.day;
+const key=()=>state.agent+'|'+state.day+'|'+state.week;
 function fillVil(){const vs=[...new Set(ROWS.map(r=>r.vil))].sort();$('vil').innerHTML=vs.map(v=>`<option>${esc(v)}</option>`).join('');state.vil=vs[0];}
 function fillAgents(){const m=new Map();ROWS.forEach(r=>{if(r.vil===state.vil&&!m.has(r.agent))m.set(r.agent,r);});const as=[...m.values()].sort((a,b)=>a.agent.localeCompare(b.agent));
   $('agent').innerHTML=as.map(a=>`<option value="${esc(a.agent)}">${esc(a.agent)}${a.loyiha?' — '+esc(a.loyiha):''}</option>`).join('');state.agent=as.length?as[0].agent:null;}
@@ -194,7 +196,7 @@ function drawMap(fit){
   const rows=current().filter(r=>r.lat!=null);
   if($('others').checked&&state.day){
     const mine=new Set(rows.map(r=>r.code));
-    ROWS.filter(r=>r.vil===state.vil&&r.day===state.day&&r.agent!==state.agent&&r.lat!=null&&!mine.has(r.code)).forEach(r=>
+    ROWS.filter(r=>r.vil===state.vil&&r.day===state.day&&r.agent!==state.agent&&r.lat!=null&&!mine.has(r.code)&&inWeek(r)).forEach(r=>
       L.circleMarker([r.lat,r.lon],{radius:4,color:'#667',weight:1,fillColor:'#99a',fillOpacity:.5}).bindTooltip(`${esc(r.name)}<br>${esc(r.agent)}`).addTo(gOthers));
   }
   const rd=road&&road.key===key()?road:null;
@@ -255,6 +257,7 @@ $('vil').onchange=e=>{state.vil=e.target.value;fillAgents();state.day=1;state.se
 $('agent').onchange=e=>{state.agent=e.target.value;state.sel=null;render(true);};
 ['route','kmlab','others'].forEach(id=>$(id).onchange=()=>drawMap(false));
 $('q').oninput=()=>table(current());
+$('week').onchange=e=>{state.week=e.target.value;state.sel=null;render(true);};
 $('fit').onclick=()=>drawMap(true);
 $('road').onclick=roadCalc;
 $('src').textContent=SRC;
